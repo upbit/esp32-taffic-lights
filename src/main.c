@@ -4,15 +4,26 @@
 #include "driver/gpio.h"
 #include "esp_log.h"
 
-/* ===== GPIO pin definitions ===== */
+/* ===== GPIO pin definitions =====
+ * The actual pin numbers are injected by platformio.ini via build_flags
+ * (-DLED_GREEN_GPIO=..., etc.) so the same source can target different
+ * boards. The defaults below are only used as a fallback. */
+#ifndef LED_GREEN_GPIO
 #define LED_GREEN_GPIO   GPIO_NUM_1
+#endif
+#ifndef LED_YELLOW_GPIO
 #define LED_YELLOW_GPIO  GPIO_NUM_2
+#endif
+#ifndef LED_RED_GPIO
 #define LED_RED_GPIO     GPIO_NUM_3
+#endif
 
 /* BOOT button on GPIO0: active-low, with internal pull-up enabled.
  * GPIO0 is a strapping pin -- don't hold it during reset, but it is safe
  * to use as a normal input once the app is running. */
+#ifndef BOOT_BUTTON_GPIO
 #define BOOT_BUTTON_GPIO        GPIO_NUM_0
+#endif
 #define BUTTON_POLL_INTERVAL_MS 20
 #define BUTTON_DEBOUNCE_MS      30
 
