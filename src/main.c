@@ -5,9 +5,9 @@
 #include "esp_log.h"
 
 /* ===== GPIO pin definitions ===== */
-#define LED_GREEN_GPIO   GPIO_NUM_25
-#define LED_YELLOW_GPIO  GPIO_NUM_26
-#define LED_RED_GPIO     GPIO_NUM_27
+#define LED_GREEN_GPIO   GPIO_NUM_1
+#define LED_YELLOW_GPIO  GPIO_NUM_2
+#define LED_RED_GPIO     GPIO_NUM_3
 
 /* BOOT button on GPIO0: active-low, with internal pull-up enabled.
  * GPIO0 is a strapping pin -- don't hold it during reset, but it is safe
