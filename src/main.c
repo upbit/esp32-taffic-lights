@@ -4,6 +4,10 @@
 #include "driver/gpio.h"
 #include "esp_log.h"
 
+#if defined(ONBOARD_LED_ENABLED) && ONBOARD_LED_ENABLED
+#include "led_strip.h"
+#endif
+
 /* ===== GPIO pin definitions =====
  * The actual pin numbers are injected by platformio.ini via build_flags
  * (-DLED_GREEN_GPIO=..., etc.) so the same source can target different
@@ -16,6 +20,20 @@
 #endif
 #ifndef LED_RED_GPIO
 #define LED_RED_GPIO     GPIO_NUM_3
+#endif
+
+/* Optional on-board WS2812 RGB LED. The ESP32-S3-DevKitC-1 has one wired
+ * to GPIO48. Enable by defining ONBOARD_LED_ENABLED=1 and ONBOARD_LED_GPIO
+ * via platformio.ini build_flags. */
+#ifndef ONBOARD_LED_GPIO
+#define ONBOARD_LED_GPIO        GPIO_NUM_48
+#endif
+#ifndef ONBOARD_LED_BRIGHTNESS
+#define ONBOARD_LED_BRIGHTNESS  32   /* 0..255, keep modest to avoid glare */
+#endif
+
+#if defined(ONBOARD_LED_ENABLED) && ONBOARD_LED_ENABLED
+static led_strip_handle_t s_onboard_led = NULL;
 #endif
 
 /* BOOT button on GPIO0: active-low, with internal pull-up enabled.
@@ -54,6 +72,44 @@ static const char *state_name(traffic_state_t s)
     }
 }
 
+static void onboard_led_init(void)
+{
+#if defined(ONBOARD_LED_ENABLED) && ONBOARD_LED_ENABLED
+    led_strip_config_t strip_cfg = {
+        .strip_gpio_num   = ONBOARD_LED_GPIO,
+        .max_leds         = 1,
+        .color_component_format = LED_STRIP_COLOR_COMPONENT_FMT_GRB,
+        .led_model        = LED_MODEL_WS2812,
+        .flags.invert_out = false,
+    };
+    led_strip_rmt_config_t rmt_cfg = {
+        .clk_src        = RMT_CLK_SRC_DEFAULT,
+        .resolution_hz  = 10 * 1000 * 1000, /* 10 MHz */
+        .flags.with_dma = false,
+    };
+    esp_err_t err = led_strip_new_rmt_device(&strip_cfg, &rmt_cfg, &s_onboard_led);
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "On-board LED init failed: %s", esp_err_to_name(err));
+        s_onboard_led = NULL;
+        return;
+    }
+    led_strip_clear(s_onboard_led);
+#endif
+}
+
+static void onboard_led_set(uint8_t r, uint8_t g, uint8_t b)
+{
+#if defined(ONBOARD_LED_ENABLED) && ONBOARD_LED_ENABLED
+    if (s_onboard_led == NULL) {
+        return;
+    }
+    led_strip_set_pixel(s_onboard_led, 0, r, g, b);
+    led_strip_refresh(s_onboard_led);
+#else
+    (void)r; (void)g; (void)b;
+#endif
+}
+
 static void leds_init(void)
 {
     gpio_config_t io_conf = {
@@ -70,6 +126,9 @@ static void leds_init(void)
     gpio_set_level(LED_GREEN_GPIO, 0);
     gpio_set_level(LED_YELLOW_GPIO, 0);
     gpio_set_level(LED_RED_GPIO, 0);
+
+    onboard_led_init();
+    onboard_led_set(0, 0, 0);
 }
 
 static void button_init(void)
@@ -115,9 +174,24 @@ static void leds_set(int green, int yellow, int red)
     gpio_set_level(LED_GREEN_GPIO, green ? 1 : 0);
     gpio_set_level(LED_YELLOW_GPIO, yellow ? 1 : 0);
     gpio_set_level(LED_RED_GPIO, red ? 1 : 0);
+
+    /* Mirror the discrete LED pattern onto the on-board WS2812.
+     * - Self-test (all three on) -> white
+     * - Single color on          -> matching color
+     * - All off                  -> dark */
+    const uint8_t lvl = ONBOARD_LED_BRIGHTNESS;
+    uint8_t r = red    ? lvl : 0;
+    uint8_t g = green  ? lvl : 0;
+    uint8_t b = 0;
+    if (yellow) { /* yellow = red + green */
+        r = lvl;
+        g = lvl;
+    }
+    onboard_led_set(r, g, b);
 }
 
-/* Power-on self test: blink all three LEDs together `times` times. */
+/* Power-on self test: blink all three LEDs together `times` times.
+ * The on-board LED follows along in white via leds_set(). */
 static void leds_self_test(int times)
 {
     ESP_LOGI(TAG, "Self-test: blink all LEDs %d time(s)", times);
